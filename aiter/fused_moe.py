@@ -851,14 +851,11 @@ def get_2stage_cfgs(
             doweight_stage1,
         ) in fused_moe_1stage_dict[get_gfx()]:
             if q_type == QuantType.per_1x128:
-                if get_gfx() == "gfx950":
-                    # gfx950 has no pre-compiled 2-stage CK MoE kernels;
-                    # JIT-compiled ones crash with HIP runtime error.
-                    # Always use 1-stage assembly kernels on gfx950.
-                    run_1stage = inter_dim % 128 == 0
-                else:
-                    # for fp8 blockscale, ck has better performance so disable assembly kernel
-                    run_1stage = token > 32 and (inter_dim % 128 == 0)
+                # Reverts frida f583a5d gfx950-only 1-stage override: the HIP failures on
+                # decode/small batch were addressed by ck_moe_stage1 split-K scratch sizing
+                # (ROCm/aiter#2547), not by forcing 1-stage here.
+                # for fp8 blockscale, ck has better performance so disable assembly kernel
+                run_1stage = token > 32 and (inter_dim % 128 == 0)
             elif q_type == QuantType.per_Token and q_dtype_w == dtypes.i8:
                 run_1stage = token > 32
             elif q_type == QuantType.per_Token and q_dtype_w == dtypes.fp8:
