@@ -81,6 +81,7 @@ def _moe_sorting_impl(
     num_local_tokens,
     dispatch_policy,
     use_opus,
+    moe_buf=None,
 ):
     device = topk_ids.device
     M, topk = topk_ids.shape
@@ -125,6 +126,7 @@ def moe_sorting(
     expert_mask=None,
     num_local_tokens=None,
     dispatch_policy=0,
+    moe_buf=None,
 ):
     try:
         return _moe_sorting_impl(
@@ -138,6 +140,7 @@ def moe_sorting(
             num_local_tokens,
             dispatch_policy,
             use_opus=_USE_OPUS_MOE_SORTING,
+            moe_buf=moe_buf,
         )
     except Exception as e:
         logger.error(f"Error in moe_sorting: {e}")
@@ -189,6 +192,7 @@ def fused_moe(
     bias1=None,
     bias2=None,
     splitk=0,
+    moe_buf=None,
 ):
     if not block_size_M:
         block_size_M = -1
@@ -214,6 +218,7 @@ def fused_moe(
         intermediate_pad=intermediate_pad,
         bias1=bias1,
         bias2=bias2,
+        moe_buf=moe_buf,
     )
 
 
@@ -241,13 +246,15 @@ def fused_moe_fake(
     intermediate_pad: int = 0,
     bias1: Optional[torch.Tensor] = None,
     bias2: Optional[torch.Tensor] = None,
+    moe_buf: Optional[torch.Tensor] = None,
 ) -> torch.Tensor:
     device = topk_ids.device
     M, topk = topk_ids.shape
     dtype = hidden_states.dtype if dtype is None else dtype
     model_dim = w2.shape[1]
-    moe_buf = torch.empty((M, model_dim), dtype=dtype, device=device)
-    return moe_buf
+    if moe_buf is not None:
+        return moe_buf
+    return torch.empty((M, model_dim), dtype=dtype, device=device)
 
 
 @torch_compile_guard(gen_fake=fused_moe_fake)
@@ -275,6 +282,7 @@ def fused_moe_(
     intermediate_pad: int = 0,
     bias1: Optional[torch.Tensor] = None,
     bias2: Optional[torch.Tensor] = None,
+    moe_buf: Optional[torch.Tensor] = None,
 ) -> torch.Tensor:
     # We do such convert since custom_op schema restriction on block_size_M, and Enum type
     activation = ActivationType(activation)
@@ -346,6 +354,7 @@ def fused_moe_(
         expert_mask,
         num_local_tokens,
         moe_sorting_dispatch_policy,
+        moe_buf=moe_buf,
     )
 
     if metadata.run_1stage:
